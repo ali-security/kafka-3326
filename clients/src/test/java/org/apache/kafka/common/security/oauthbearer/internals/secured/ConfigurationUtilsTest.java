@@ -17,6 +17,7 @@
 
 package org.apache.kafka.common.security.oauthbearer.internals.secured;
 
+import org.junit.jupiter.api.AfterEach;
 import java.io.File;
 import java.io.IOException;
 import java.util.Collections;
@@ -25,9 +26,18 @@ import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.test.TestUtils;
 import org.junit.jupiter.api.Test;
 
+import static org.apache.kafka.common.config.internals.BrokerSecurityConfigs.ALLOWED_SASL_OAUTHBEARER_URLS_CONFIG;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+
 public class ConfigurationUtilsTest extends OAuthBearerTest {
 
     private final static String URL_CONFIG_NAME = "url";
+    private static final String FILE_CONFIG_NAME = "file";
+
+    @AfterEach
+    public void tearDown() throws Exception {
+        System.clearProperty(ALLOWED_SASL_OAUTHBEARER_URLS_CONFIG);
+    }
 
     @Test
     public void testUrl() {
@@ -83,6 +93,31 @@ public class ConfigurationUtilsTest extends OAuthBearerTest {
         Map<String, Object> configs = Collections.singletonMap(URL_CONFIG_NAME, value);
         ConfigurationUtils cu = new ConfigurationUtils(configs);
         cu.validateUrl(URL_CONFIG_NAME);
+    }
+    
+    @Test
+    public void testAllowedSaslOauthbearerUrlSystemProperty() {
+        String url = "http://www.example.com";
+        String fileUrl = "file:///etc/passwd";
+        Map<String, Object> configs = new HashMap<>();
+        configs.put(URL_CONFIG_NAME, url);
+        configs.put(FILE_CONFIG_NAME, fileUrl);
+        ConfigurationUtils cu = new ConfigurationUtils(configs);
+
+        // By default, all URLs are allowed
+        assertDoesNotThrow(() -> cu.throwIfURLIsNotAllowed(URL_CONFIG_NAME));
+        assertDoesNotThrow(() -> cu.throwIfURLIsNotAllowed(FILE_CONFIG_NAME));
+
+        // add one url into allowed list
+        System.setProperty(ALLOWED_SASL_OAUTHBEARER_URLS_CONFIG, url);
+        assertDoesNotThrow(() -> cu.throwIfURLIsNotAllowed(URL_CONFIG_NAME));
+        assertThrowsWithMessage(IllegalArgumentException.class, () -> cu.throwIfURLIsNotAllowed(FILE_CONFIG_NAME),
+                ALLOWED_SASL_OAUTHBEARER_URLS_CONFIG);
+
+        // add all urls into allowed list
+        System.setProperty(ALLOWED_SASL_OAUTHBEARER_URLS_CONFIG, url + "," + fileUrl);
+        assertDoesNotThrow(() -> cu.throwIfURLIsNotAllowed(URL_CONFIG_NAME));
+        assertDoesNotThrow(() -> cu.throwIfURLIsNotAllowed(FILE_CONFIG_NAME));
     }
 
     @Test
